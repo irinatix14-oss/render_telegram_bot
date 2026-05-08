@@ -1,7 +1,7 @@
 import os
 import logging
 from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ConversationHandler, ContextTypes
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, ConversationHandler, CallbackContext
 
 # Логирование
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
@@ -26,17 +26,12 @@ SCORES = {
     "В": 1,
 }
 
-user_scores = {}
-user_answers = {}
-
-# --- СТАРТ ---
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+def start(update: Update, context: CallbackContext) -> int:
     user = update.effective_user
     user_data = context.user_data
     user_data["score"] = 0
     user_data["answers"] = {}
 
-    # Если есть ФИ, используем, иначе берем first_name
     name = user.full_name if user.full_name else user.first_name
 
     text = (
@@ -55,116 +50,106 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         "▪️Существует ли риск нецелевого расхода бюджета.\n"
         "▪️С чего эффективнее начать: с диагностики аудитории или сразу с "
         "настройки трафика.\n\n"
-        "*Это займет не больше 5 минут*. В конце вы получите экспертную оценку"
+        "*Это займет не больше 5 минут*. В конце вы получите экспертную оценку "
         "текущей ситуации и мои рекомендации 👇"
     )
     keyboard = [["Начать тест"]]
     reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
-    await update.message.reply_text(text, parse_mode="Markdown", reply_markup=reply_markup)
+    update.message.reply_text(text, parse_mode="Markdown", reply_markup=reply_markup)
     return QUESTION_1
 
-# --- ВОПРОСЫ ---
-async def ask_question(update, context, num, question_text, answers, next_state):
-    keyboard = [[f"Ответ А"], [f"Ответ Б"], [f"Ответ В"]]
+def ask_question(update, context, question_text, next_state):
+    keyboard = [["Ответ А"], ["Ответ Б"], ["Ответ В"]]
     reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
-    await update.message.reply_text(question_text, parse_mode="Markdown", reply_markup=reply_markup)
+    update.message.reply_text(question_text, parse_mode="Markdown", reply_markup=reply_markup)
     return next_state
 
-async def question_1(update, context):
-    return await ask_question(update, context, 1,
+def question_1(update: Update, context: CallbackContext):
+    return ask_question(update, context,
         "1️⃣ *Кто ваша целевая аудитория?*\n\nА) Я могу назвать 2–3 сегмента с понятными характеристиками (пол, возраст, доход, боли, ценности)\nБ) Знаю примерно, но размыто (например, «женщины 30–50 лет»)\nВ) Кажется, что «всем подходит», я не сегментировал клиентов",
-        ["Ответ А", "Ответ Б", "Ответ В"], QUESTION_1)
+        QUESTION_1)
 
-async def question_2(update, context):
-    return await ask_question(update, context, 2,
+def question_2(update: Update, context: CallbackContext):
+    return ask_question(update, context,
         "2️⃣ *Насколько точно вы понимаете, кто ваш клиент?*\n\nА) Точно понимаю, кому продаю и какие клиенты мне подходят.\nБ) Есть общее понимание, но не всегда понятно, почему приходят «не те» люди.\nВ) Боюсь представить. Я понимаю, что звонят и спрашивают часто не те люди, и время тратится впустую.",
-        ["Ответ А", "Ответ Б", "Ответ В"], QUESTION_2)
+        QUESTION_2)
 
-async def question_3(update, context):
-    return await ask_question(update, context, 3,
+def question_3(update: Update, context: CallbackContext):
+    return ask_question(update, context,
         "3️⃣ *Почему клиенты выбирают именно вас?*\n\nА) Знаю чётко: у меня есть 2–3 УТП, которые отличают меня от конкурентов, подтверждённые словами клиентов.\nБ) Думаю, что у нас хорошее качество/сервис/цена, но не записывал точные формулировки от клиентов.\nВ) Честно говоря, не знаю — я не спрашивал и не собирал обратную связь.",
-        ["Ответ А", "Ответ Б", "Ответ В"], QUESTION_3)
+        QUESTION_3)
 
-async def question_4(update, context):
-    return await ask_question(update, context, 4,
+def question_4(update: Update, context: CallbackContext):
+    return ask_question(update, context,
         "4️⃣ *Что мешает вашим клиентам купить?*\n\nА) Я знаю их ключевые страхи, барьеры и возражения (например, «дорого», «не верю в результат», «боюсь ошибиться»), я записываю это с реальных разговоров.\nБ) Догадываюсь, но не уверен — не систематизировал.\nВ) Никогда глубоко не анализировал возражения, работаю с теми, кто приходит.",
-        ["Ответ А", "Ответ Б", "Ответ В"], QUESTION_4)
+        QUESTION_4)
 
-async def question_5(update, context):
-    return await ask_question(update, context, 5,
+def question_5(update: Update, context: CallbackContext):
+    return ask_question(update, context,
         "5️⃣ *Насколько хорошо вы знаете язык своих клиентов?*\n\nА) Я использую те же слова и выражения, что и они. Я слышал их в разговорах, переписках, вопросах. Иногда это совсем не те формулировки, которыми я сам привык описывать свою работу.\nБ) Я говорю о продукте так, как принято в моей сфере. Думаю, клиенты понимают профессиональные термины и описания.\nВ) Я не сверял. Пишу так, как считаю правильным.",
-        ["Ответ А", "Ответ Б", "Ответ В"], QUESTION_5)
+        QUESTION_5)
 
-async def question_6(update, context):
-    return await ask_question(update, context, 6,
+def question_6(update: Update, context: CallbackContext):
+    return ask_question(update, context,
         "6️⃣ *Насколько вы уверены, что ваше предложение уникально для клиента?*\n\nА) Я могу сформулировать, чем я отличаюсь, словами клиента. Не «индивидуальный подход», а конкретная деталь, которую замечают и ценят те, кто ко мне приходит.\nБ) Я выделяюсь качеством и сервисом, но пока сложно показать это так, чтобы клиент сразу увидел разницу между мной и конкурентами.\nВ) Пока сложно сформулировать отличие. Кажется, в нашей нише у всех похожие предложения, и клиенту сложно увидеть разницу.",
-        ["Ответ А", "Ответ Б", "Ответ В"], QUESTION_6)
+        QUESTION_6)
 
-async def question_7(update, context):
-    return await ask_question(update, context, 7,
+def question_7(update: Update, context: CallbackContext):
+    return ask_question(update, context,
         "7️⃣ *Что происходит с клиентом после того, как он оставил заявку?*\n\nА) Я понимаю, с какими ожиданиями он пришёл и что ему важно услышать в первые минуты общения. У меня есть выстроенный сценарий первого касания, который снимает его тревогу и двигает к решению.\nБ) Обычно я или менеджер быстро связываемся, уточняем запрос и договариваемся о встрече или продаже. Без жёсткой структуры, но оперативно.\nВ) Отвечаю по возможности. Иногда быстро, иногда с задержкой — отдельной системы первого касания пока нет.",
-        ["Ответ А", "Ответ Б", "Ответ В"], QUESTION_7)
+        QUESTION_7)
 
-# --- ОБРАБОТКА ВСЕХ ОТВЕТОВ ---
-async def handle_answer(update, context, q_num, next_handler, score_key, answer_text_key):
+def handle_answer(update, context, next_handler, answer_key):
     user_data = context.user_data
     answer = update.message.text.strip()
-    # Получаем букву ответа
-    letter = answer[-1] if answer[-1] in ["А", "Б", "В"] else None
+    letter = answer[-1] if answer and answer[-1] in ["А", "Б", "В"] else None
     if not letter:
-        await update.message.reply_text("Пожалуйста, выберите ответ, используя кнопку.")
-        return q_num  # возвращаем на тот же вопрос
-
+        update.message.reply_text("Пожалуйста, выберите ответ, используя кнопки.")
+        return None
     score = SCORES.get(letter, 0)
     user_data["score"] += score
-    user_data["answers"][answer_text_key] = answer
+    user_data["answers"][answer_key] = answer
+    return next_handler(update, context)
 
-    # Переходим к следующему вопросу
-    return await next_handler(update, context)
+def handle_q1(update: Update, context: CallbackContext):
+    return handle_answer(update, context, question_2, "q1")
 
-async def handle_q1(update, context):
-    return await handle_answer(update, context, QUESTION_1, question_2, "score", "q1")
+def handle_q2(update: Update, context: CallbackContext):
+    return handle_answer(update, context, question_3, "q2")
 
-async def handle_q2(update, context):
-    return await handle_answer(update, context, QUESTION_2, question_3, "score", "q2")
+def handle_q3(update: Update, context: CallbackContext):
+    return handle_answer(update, context, question_4, "q3")
 
-async def handle_q3(update, context):
-    return await handle_answer(update, context, QUESTION_3, question_4, "score", "q3")
+def handle_q4(update: Update, context: CallbackContext):
+    return handle_answer(update, context, question_5, "q4")
 
-async def handle_q4(update, context):
-    return await handle_answer(update, context, QUESTION_4, question_5, "score", "q4")
+def handle_q5(update: Update, context: CallbackContext):
+    return handle_answer(update, context, question_6, "q5")
 
-async def handle_q5(update, context):
-    return await handle_answer(update, context, QUESTION_5, question_6, "score", "q5")
+def handle_q6(update: Update, context: CallbackContext):
+    return handle_answer(update, context, question_7, "q6")
 
-async def handle_q6(update, context):
-    return await handle_answer(update, context, QUESTION_6, question_7, "score", "q6")
-
-async def handle_q7(update, context):
+def handle_q7(update: Update, context: CallbackContext):
     user_data = context.user_data
     answer = update.message.text.strip()
-    letter = answer[-1] if answer[-1] in ["А", "Б", "В"] else None
+    letter = answer[-1] if answer and answer[-1] in ["А", "Б", "В"] else None
     if not letter:
-        await update.message.reply_text("Пожалуйста, выберите ответ, используя кнопку.")
+        update.message.reply_text("Пожалуйста, выберите ответ, используя кнопки.")
         return QUESTION_7
     score = SCORES.get(letter, 0)
     user_data["score"] += score
     user_data["answers"]["q7"] = answer
-
     total_score = user_data["score"]
-    await update.message.reply_text(f"Спасибо за ответы! Подсчитываю результаты...", reply_markup=ReplyKeyboardRemove())
-
-    # Отправляем результат пользователю
+    update.message.reply_text("Спасибо за ответы! Подсчитываю результаты...", reply_markup=ReplyKeyboardRemove())
     if total_score >= 19:
-        await show_green_zone(update)
+        show_green_zone(update)
     elif total_score >= 12:
-        await show_yellow_zone(update)
+        show_yellow_zone(update)
     else:
-        await show_red_zone(update)
+        show_red_zone(update)
     return CONTACT_NAME
 
-# --- ЗОНЫ РЕЗУЛЬТАТОВ ---
-async def show_green_zone(update):
+def show_green_zone(update):
     text = (
         "*Результат: «Зелёная зона» (19 баллов и более)*\n"
         "*Проработанность аудитории: высокая — 70–80%.*\n\n"
@@ -184,9 +169,9 @@ async def show_green_zone(update):
     )
     keyboard = [["Записаться на созвон-консультацию →"]]
     reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
-    await update.message.reply_text(text, parse_mode="Markdown", reply_markup=reply_markup)
+    update.message.reply_text(text, parse_mode="Markdown", reply_markup=reply_markup)
 
-async def show_yellow_zone(update):
+def show_yellow_zone(update):
     text = (
         "*Результат: «Жёлтая зона» (12–18 баллов)*\n"
         "*Проработанность аудитории: средняя — 40–60%.*\n\n"
@@ -220,9 +205,9 @@ async def show_yellow_zone(update):
     )
     keyboard = [["Записаться на созвон-консультацию →"]]
     reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
-    await update.message.reply_text(text, parse_mode="Markdown", reply_markup=reply_markup)
+    update.message.reply_text(text, parse_mode="Markdown", reply_markup=reply_markup)
 
-async def show_red_zone(update):
+def show_red_zone(update):
     text = (
         "*Результат: «Красная зона» (11 баллов и менее)*\n"
         "*Проработанность аудитории: низкая (25% и ниже).*\n\n"
@@ -249,10 +234,9 @@ async def show_red_zone(update):
     )
     keyboard = [["Записаться на 30-минутный созвон о диагностике →"]]
     reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
-    await update.message.reply_text(text, parse_mode="Markdown", reply_markup=reply_markup)
+    update.message.reply_text(text, parse_mode="Markdown", reply_markup=reply_markup)
 
-# --- СБОР КОНТАКТОВ ---
-async def contact_name(update, context):
+def contact_name(update: Update, context: CallbackContext):
     user = update.effective_user
     name = user.full_name if user.full_name else user.first_name
     text = (
@@ -262,30 +246,28 @@ async def contact_name(update, context):
         "— *Сфера бизнеса*\n"
         "— *Ссылка на ваш сайт или посадочную страницу*"
     )
-    await update.message.reply_text(text, parse_mode="Markdown", reply_markup=ReplyKeyboardRemove())
+    update.message.reply_text(text, parse_mode="Markdown", reply_markup=ReplyKeyboardRemove())
     return CONTACT_SPHERE
 
-async def contact_sphere(update, context):
+def contact_sphere(update: Update, context: CallbackContext):
     user_data = context.user_data
     user_data["contact_name"] = update.message.text.strip()
-    await update.message.reply_text("Напишите, пожалуйста, вашу *сферу бизнеса*", parse_mode="Markdown")
+    update.message.reply_text("Напишите, пожалуйста, вашу *сферу бизнеса*", parse_mode="Markdown")
     return CONTACT_LINK
 
-async def contact_link(update, context):
+def contact_link(update: Update, context: CallbackContext):
     user_data = context.user_data
     user_data["contact_sphere"] = update.message.text.strip()
-    await update.message.reply_text("Напишите, пожалуйста, *ссылку на ваш сайт или посадочную страницу*", parse_mode="Markdown")
-    return 99  # Следующий шаг — финал
+    update.message.reply_text("Напишите, пожалуйста, *ссылку на ваш сайт или посадочную страницу*", parse_mode="Markdown")
+    return 99
 
-async def finish(update, context):
+def finish(update: Update, context: CallbackContext):
     user_data = context.user_data
     user_data["contact_link"] = update.message.text.strip()
-
     user = update.effective_user
     user_name = user.full_name if user.full_name else user.first_name
     username = f"@{user.username}" if user.username else "не указан"
 
-    # Финальное сообщение пользователю
     text = (
         f"{user_name}, спасибо, что прошли тест!\n\n"
         "Я свяжусь с вами в ближайшее время, чтобы обсудить результат и показать, "
@@ -296,16 +278,13 @@ async def finish(update, context):
     )
     keyboard = [["Подписаться на канал"]]
     reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
-    await update.message.reply_text(text, parse_mode="Markdown", reply_markup=reply_markup)
-
-    # Кнопка с ссылкой на канал
-    await update.message.reply_text(
+    update.message.reply_text(text, parse_mode="Markdown", reply_markup=reply_markup)
+    update.message.reply_text(
         "👉 [Нажмите сюда, чтобы перейти в канал](https://t.me/target_irinatai)",
         parse_mode="Markdown",
         disable_web_page_preview=True
     )
 
-    # Отправляем заявку тебе в личку
     total_score = user_data.get("score", 0)
     if total_score >= 19:
         zone = "Зелёная"
@@ -331,46 +310,39 @@ async def finish(update, context):
         f"Q6: {user_data.get('answers', {}).get('q6', '—')}\n"
         f"Q7: {user_data.get('answers', {}).get('q7', '—')}"
     )
-    await context.bot.send_message(
-        chat_id=YOUR_TG_USERNAME,
-        text=msg_to_you,
-        parse_mode="Markdown"
-    )
-
+    context.bot.send_message(chat_id=YOUR_TG_USERNAME, text=msg_to_you, parse_mode="Markdown")
     return ConversationHandler.END
 
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("Тест прерван.", reply_markup=ReplyKeyboardRemove())
+def cancel(update: Update, context: CallbackContext) -> int:
+    update.message.reply_text("Тест прерван.", reply_markup=ReplyKeyboardRemove())
     return ConversationHandler.END
 
-# --- ЗАПУСК ---
 def main():
-    app = Application.builder().token(BOT_TOKEN).build()
+    updater = Updater(BOT_TOKEN)
+    dp = updater.dispatcher
 
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
-            QUESTION_1: [MessageHandler(filters.Regex("^(Ответ А|Ответ Б|Ответ В)$"), handle_q1)],
-            QUESTION_2: [MessageHandler(filters.Regex("^(Ответ А|Ответ Б|Ответ В)$"), handle_q2)],
-            QUESTION_3: [MessageHandler(filters.Regex("^(Ответ А|Ответ Б|Ответ В)$"), handle_q3)],
-            QUESTION_4: [MessageHandler(filters.Regex("^(Ответ А|Ответ Б|Ответ В)$"), handle_q4)],
-            QUESTION_5: [MessageHandler(filters.Regex("^(Ответ А|Ответ Б|Ответ В)$"), handle_q5)],
-            QUESTION_6: [MessageHandler(filters.Regex("^(Ответ А|Ответ Б|Ответ В)$"), handle_q6)],
-            QUESTION_7: [MessageHandler(filters.Regex("^(Ответ А|Ответ Б|Ответ В)$"), handle_q7)],
-            CONTACT_NAME: [
-                MessageHandler(filters.Regex(".*созвон.*"), contact_name),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, contact_name)
-            ],
-            CONTACT_SPHERE: [MessageHandler(filters.TEXT & ~filters.COMMAND, contact_sphere)],
-            CONTACT_LINK: [MessageHandler(filters.TEXT & ~filters.COMMAND, contact_link)],
-            99: [MessageHandler(filters.TEXT & ~filters.COMMAND, finish)],
+            QUESTION_1: [MessageHandler(Filters.regex("^(Ответ А|Ответ Б|Ответ В)$"), handle_q1)],
+            QUESTION_2: [MessageHandler(Filters.regex("^(Ответ А|Ответ Б|Ответ В)$"), handle_q2)],
+            QUESTION_3: [MessageHandler(Filters.regex("^(Ответ А|Ответ Б|Ответ В)$"), handle_q3)],
+            QUESTION_4: [MessageHandler(Filters.regex("^(Ответ А|Ответ Б|Ответ В)$"), handle_q4)],
+            QUESTION_5: [MessageHandler(Filters.regex("^(Ответ А|Ответ Б|Ответ В)$"), handle_q5)],
+            QUESTION_6: [MessageHandler(Filters.regex("^(Ответ А|Ответ Б|Ответ В)$"), handle_q6)],
+            QUESTION_7: [MessageHandler(Filters.regex("^(Ответ А|Ответ Б|Ответ В)$"), handle_q7)],
+            CONTACT_NAME: [MessageHandler(Filters.text & ~Filters.command, contact_name)],
+            CONTACT_SPHERE: [MessageHandler(Filters.text & ~Filters.command, contact_sphere)],
+            CONTACT_LINK: [MessageHandler(Filters.text & ~Filters.command, contact_link)],
+            99: [MessageHandler(Filters.text & ~Filters.command, finish)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
 
-    app.add_handler(conv_handler)
+    dp.add_handler(conv_handler)
     logger.info("Бот запущен и готов к работе!")
-    app.run_polling()
+    updater.start_polling()
+    updater.idle()
 
 if __name__ == "__main__":
     main()
